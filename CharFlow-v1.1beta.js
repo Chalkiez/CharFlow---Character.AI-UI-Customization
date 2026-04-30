@@ -249,25 +249,25 @@
             let css = `
                 .group.relative.max-w-3xl.m-auto.w-full { margin-bottom: ${spacing} !important; }
                 ${MSG} { transition: all 0.1s ease; box-shadow: ${boxShadow}; ${borderStyle} }
-                ${MSG} p,
-                ${MSG} span,
-                ${MSG} div,
-                ${MSG} li,
-                ${MSG} .prose,
-                ${MSG} .prose *,
-                [data-testid="completed-message"] .prose,
-                [data-testid="completed-message"] .prose *,
-                [data-testid="active-message"] .prose,
-                [data-testid="active-message"] .prose *,
-                [data-testid="generating-message"] .prose,
-                [data-testid="generating-message"] .prose *,
-                [data-testid="streaming-message"] .prose,
-                [data-testid="streaming-message"] .prose * {
-                    font-family: ${fontFamily} !important;
-                    font-size: ${fontSize} !important;
-                    font-weight: ${fontWeight} !important;
-                    line-height: ${lineHeight} !important;
-                }
+${MSG} p,
+${MSG} span,
+${MSG} div,
+${MSG} li,
+${MSG} .prose,
+${MSG} .prose *,
+[data-testid="completed-message"] .prose,
+[data-testid="completed-message"] .prose *,
+[data-testid="active-message"] .prose,
+[data-testid="active-message"] .prose *,
+[data-testid="generating-message"] .prose,
+[data-testid="generating-message"] .prose *,
+[data-testid="streaming-message"] .prose,
+[data-testid="streaming-message"] .prose * {
+    font-family: ${fontFamily} !important;
+    font-size: ${fontSize} !important;
+    font-weight: ${fontWeight} !important;
+    line-height: ${lineHeight} !important;
+}
             `;
 
             // Background / color
@@ -370,7 +370,7 @@
             }
             document.body.style.position = 'relative';
             document.body.style.zIndex = '1';
-            document.body.style.backgroundColor = 'transparent';
+            document.body.style.backgroundColor = bgImage ? 'transparent' : '';
         }
 
         // ============================================
@@ -430,6 +430,12 @@
             const presetData = GM_getValue(PRESET_PREFIX + name, null);
             if (presetData) {
                 try {
+                    const exportSettings = { ...presetData.settings };
+                    if (exportSettings.bgFile && exportSettings.bgFile !== '') {
+                        showNotification('Local background image was excluded from preset — only URL backgrounds are exportable', 'warning');
+                    }
+                    delete exportSettings.bgFile;
+
                     const blob = new Blob([JSON.stringify({ exportDate: new Date().toISOString(), ...JSON.parse(presetData) }, null, 2)], { type: 'application/json' });
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
@@ -1360,14 +1366,43 @@
 
         async function loadAllChatMessages() {
             const container = document.querySelector("#chat-messages");
-            if (!container) return false;
-            let last = 0, stable = 0;
-            while (true) {
-                container.scrollTop = -container.scrollHeight;
-                await new Promise(r => setTimeout(r, 1200));
-                const count = container.querySelectorAll(".group").length;
-                if (count === last) { stable++; if (stable > 3) break; } else { stable = 0; last = count; }
+
+            if (!container) {
+                showNotification('Chat container not found — are you inside a chat?', 'error');
+                return false;
             }
+
+            let last = 0, stable = 0;
+            const MAX_ATTEMPTS = 20;
+            let attempts = 0;
+
+            try {
+                while (attempts < MAX_ATTEMPTS) {
+                    attempts++;
+                    container.scrollTop = -container.scrollHeight;
+                    await new Promise(r => setTimeout(r, 1200));
+
+                    const count = container.querySelectorAll(".group").length;
+
+                    if (count === last) {
+                        stable++;
+                        if (stable > 3) break;
+                    } else {
+                        stable = 0;
+                        last = count;
+                    }
+                }
+
+                if (attempts >= MAX_ATTEMPTS) {
+                    showNotification('Export loaded partially — some older messages may be missing', 'warning');
+                }
+
+            } catch (e) {
+                console.error('[CharFlow] Failed to load messages:', e);
+                showNotification('Failed to load messages — export may be incomplete', 'error');
+                return false;
+            }
+
             return true;
         }
 
@@ -1621,22 +1656,46 @@ body.light .bubble{
         }
 
         async function runExportChat() {
-            const res = await askExportNames();
-            if (!res) return;
-            const { user, bot } = res;
-            showNotification('Loading messages...', 'info');
-            await loadAllChatMessages();
-            showNotification('Extracting avatars...', 'info');
-            const avatars = await extractChatAvatars();
-            showNotification('Building export...', 'info');
-            const messages = extractChatMessages(user, bot, avatars);
-            const html = buildExportHTML(messages, bot);
-            const blob = new Blob([html], { type: "text/html" });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url; a.download = `cai_chat_${bot}.html`; a.click();
-            URL.revokeObjectURL(url);
-            showNotification('Chat exported!', 'success');
+            try {
+                const res = await askExportNames();
+                if (!res) return;
+
+                const { user, bot } = res;
+
+                showNotification('Loading messages...', 'info');
+                const loaded = await loadAllChatMessages();
+                if (!loaded) return;
+
+                showNotification('Extracting avatars...', 'info');
+                const avatars = await extractChatAvatars().catch(e => {
+                    console.error('[CharFlow] Avatar extraction failed:', e);
+                    showNotification('Could not load avatars — exporting without them', 'warning');
+                    return { userAvatar: '', botAvatar: '' };
+                });
+
+                showNotification('Building export...', 'info');
+                const messages = extractChatMessages(user, bot, avatars);
+
+                if (messages.length === 0) {
+                    showNotification('No messages found to export', 'error');
+                    return;
+                }
+
+                const html = buildExportHTML(messages, bot);
+                const blob = new Blob([html], { type: 'text/html' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `cai_chat_${bot}.html`;
+                a.click();
+                URL.revokeObjectURL(url);
+
+                showNotification(`Exported ${messages.length} messages successfully!`, 'success');
+
+            } catch (e) {
+                console.error('[CharFlow] Export failed:', e);
+                showNotification('Export failed unexpectedly — check the console for details', 'error');
+            }
         }
 
         // ============================================
@@ -1738,20 +1797,29 @@ body.light .bubble{
         }
 
         function disableScript() {
-            cleanupBackground();
-            if (globalStyleElement && globalStyleElement.parentNode) {
-                globalStyleElement.remove();
-                globalStyleElement = null;
-                lastStyleOutput = '';
-            }
-            if (observer) {
-                observer.disconnect();
-                observer = null;
+            try {
+                cleanupBackground();
+                if (globalStyleElement && globalStyleElement.parentNode) {
+                    globalStyleElement.remove();
+                    globalStyleElement = null;
+                    lastStyleOutput = '';
+                }
+                if (observer) {
+                    observer.disconnect();
+                    observer = null;
+                }
+            } catch (e) {
+                console.error('[CharFlow] Failed to disable script:', e);
+                showNotification('CharFlow failed to clean up properly — try refreshing', 'error');
             }
         }
 
         function enableScript() {
-            if (!observer) {
+            try {
+                if (observer) {
+                    observer.disconnect();
+                    observer = null;
+                }
                 observer = new MutationObserver(() => {
                     clearTimeout(debounceTimer);
                     debounceTimer = setTimeout(() => {
@@ -1760,9 +1828,12 @@ body.light .bubble{
                     }, 300);
                 });
                 observer.observe(document.body, { childList: true, subtree: true });
+                applyBackground();
+                applyStyles();
+            } catch (e) {
+                console.error('[CharFlow] Failed to re-enable script:', e);
+                showNotification('CharFlow failed to reactivate — try refreshing the page', 'error');
             }
-            applyBackground();
-            applyStyles();
         }
 
         const _pushState = history.pushState.bind(history);
