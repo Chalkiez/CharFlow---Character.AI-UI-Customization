@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         CharFlow - Character AI Customization
 // @namespace    http://tampermonkey.net/
-// @version      21.0
-// @description  A Character AI UI Customization
+// @version      1.3
+// @description  Customize every inch of Character.AI — chat bubbles, fonts, backgrounds, shadows, glass effects & more. 35+ settings, presets, export chats to HTML. Make your chats actually yours.
 // @match        *://character.ai/chat/*
 // @match        *://www.character.ai/chat/*
 // @grant        GM_addStyle
@@ -10,6 +10,7 @@
 // @grant        GM_setValue
 // @grant        GM_deleteValue
 // @grant        GM_listValues
+// @license      MIT
 // ==/UserScript==
 
 (function() {
@@ -146,6 +147,29 @@
         let observer = null;
 
         // ============================================
+        // IN-MEMORY STATE (single source of truth)
+        // ============================================
+        let STATE = {};
+
+        function loadState() {
+            for (const [key, storageKey] of Object.entries(STORAGE)) {
+                STATE[key] = GM_getValue(storageKey, DEFAULTS[key] !== undefined ? DEFAULTS[key] : '');
+            }
+        }
+
+        function saveState(key, value) {
+            try {
+                STATE[key] = value;
+                GM_setValue(STORAGE[key], value);
+            } catch (e) {
+                console.error('[CharFlow] Failed to save:', key, e);
+                showNotification('Failed to save setting - storage may be full', 'warning');
+                return false;
+            }
+            return true;
+        }
+
+        // ============================================
         // NOTIFICATION SYSTEM
         // ============================================
         let notificationTimeout = null;
@@ -192,6 +216,8 @@
                 showNotification('Your custom font URL could not be loaded. Check that the link is a valid Google Fonts URL and try again.', 'error');
                 loadedFonts.delete(fontId);
                 activeFontLinks.delete(link);
+                link.remove();
+
             };
             document.head.appendChild(link);
             activeFontLinks.add(link);
@@ -199,8 +225,8 @@
         }
 
         function getFontFamily() {
-            const fontName = GM_getValue(STORAGE.fontFamily, 'Inter');
-            const customUrl = GM_getValue(STORAGE.fontCustomUrl, '');
+            const fontName = STATE.fontFamily || 'Inter';
+            const customUrl = STATE.fontCustomUrl || '';
             if (customUrl && customUrl.trim() !== '') return `'Custom Font', ${fontName}, system-ui, sans-serif`;
             return `${fontName}, system-ui, -apple-system, sans-serif`;
         }
@@ -209,44 +235,44 @@
         // CSS GENERATION (no gradient)
         // ============================================
         function generateStyles() {
-            const mode = GM_getValue(STORAGE.bubbleMode, 'global');
-            const globalColor = GM_getValue(STORAGE.bubbleGlobal, '#2d2d3d');
-            const aiColor = GM_getValue(STORAGE.bubbleAi, '#2d2d3d');
-            const userColor = GM_getValue(STORAGE.bubbleUser, '#1a1a2e');
-            const spacing = GM_getValue(STORAGE.bubbleSpacing, '8px');
+            const mode = STATE.bubbleMode;
+            const globalColor = STATE.bubbleGlobal;
+            const aiColor = STATE.bubbleAi;
+            const userColor = STATE.bubbleUser;
+            const spacing = STATE.bubbleSpacing;
             const fontFamily = getFontFamily();
-            const fontSize = GM_getValue(STORAGE.fontSize, '14px');
-            const fontWeight = GM_getValue(STORAGE.fontWeight, '400');
-            const lineHeight = GM_getValue(STORAGE.lineHeight, '1.5');
-            const shadowEnabled = GM_getValue(STORAGE.shadowEnabled, false);
-            const shadowBlur = GM_getValue(STORAGE.shadowBlur, '12');
-            const shadowSpread = GM_getValue(STORAGE.shadowSpread, '0');
-            const shadowOffsetX = GM_getValue(STORAGE.shadowOffsetX, '0');
-            const shadowOffsetY = GM_getValue(STORAGE.shadowOffsetY, '4');
-            const shadowOpacity = GM_getValue(STORAGE.shadowOpacity, '0.3');
-            const shadowColor = GM_getValue(STORAGE.shadowColor, '#000000');
+            const fontSize = STATE.fontSize;
+            const fontWeight = STATE.fontWeight;
+            const lineHeight = STATE.lineHeight;
+            const shadowEnabled = STATE.shadowEnabled;
+            const shadowBlur = STATE.shadowBlur;
+            const shadowSpread = STATE.shadowSpread;
+            const shadowOffsetX = STATE.shadowOffsetX;
+            const shadowOffsetY = STATE.shadowOffsetY;
+            const shadowOpacity = STATE.shadowOpacity;
+            const shadowColor = STATE.shadowColor;
             const r = parseInt(shadowColor.slice(1,3),16), g = parseInt(shadowColor.slice(3,5),16), b_c = parseInt(shadowColor.slice(5,7),16);
             const boxShadow = shadowEnabled ? `${shadowOffsetX}px ${shadowOffsetY}px ${shadowBlur}px ${shadowSpread}px rgba(${r},${g},${b_c},${shadowOpacity})` : 'none';
-            const glassEnabled = GM_getValue(STORAGE.glassEnabled, false);
-            const glassBlur = GM_getValue(STORAGE.glassBlur, '10');
-            const glassOpacity = GM_getValue(STORAGE.glassOpacity, '0.7');
-            const borderEnabled = GM_getValue(STORAGE.borderEnabled, false);
-            const borderWidth = GM_getValue(STORAGE.borderWidth, '2');
-            const borderColor = GM_getValue(STORAGE.borderColor, '#ffffff');
+            const glassEnabled = STATE.glassEnabled;
+            const glassBlur = STATE.glassBlur;
+            const glassOpacity = STATE.glassOpacity;
+            const borderEnabled = STATE.borderEnabled;
+            const borderWidth = STATE.borderWidth;
+            const borderColor = STATE.borderColor;
             const borderStyle = borderEnabled ? `border: ${borderWidth}px solid ${borderColor} !important;` : '';
-            const cornerMode = GM_getValue(STORAGE.cornerMode, 'uniform');
-            const tl = GM_getValue(STORAGE.cornerTopLeft, '18');
-            const tr = GM_getValue(STORAGE.cornerTopRight, '18');
-            const br = GM_getValue(STORAGE.cornerBottomRight, '18');
-            const bl = GM_getValue(STORAGE.cornerBottomLeft, '18');
-            const textColorMode = GM_getValue(STORAGE.textColorMode, 'global');
-            const textColorGlobal = GM_getValue(STORAGE.textColorGlobal, '#e0e0e0');
-            const textColorAi = GM_getValue(STORAGE.textColorAi, '#e0e0e0');
-            const textColorUser = GM_getValue(STORAGE.textColorUser, '#e0e0e0');
-            const italicColor = GM_getValue(STORAGE.textItalicColor, '#a855f7');
-            const boldColor = GM_getValue(STORAGE.textBoldColor, '#f59e0b');
-            const italicEnabled = GM_getValue(STORAGE.textItalicEnabled, false);
-            const boldEnabled = GM_getValue(STORAGE.textBoldEnabled, false);
+            const cornerMode = STATE.cornerMode;
+            const tl = STATE.cornerTopLeft;
+            const tr = STATE.cornerTopRight;
+            const br = STATE.cornerBottomRight;
+            const bl = STATE.cornerBottomLeft;
+            const textColorMode = STATE.textColorMode;
+            const textColorGlobal = STATE.textColorGlobal;
+            const textColorAi = STATE.textColorAi;
+            const textColorUser = STATE.textColorUser;
+            const italicColor = STATE.textItalicColor;
+            const boldColor = STATE.textBoldColor;
+            const italicEnabled = STATE.textItalicEnabled;
+            const boldEnabled = STATE.textBoldEnabled;
 
             const MSG = '[data-testid="completed-message"],[data-testid="active-message"],[data-testid="generating-message"],[data-testid="streaming-message"],[class*="message-bubble"]';
             const AI = '.group.relative:not(:has(.flex-row-reverse))';
@@ -310,25 +336,33 @@ ${MSG} .prose *,
             }
 
             // Italic
+            const ITALIC_SEL = `[data-testid="completed-message"] em,[data-testid="completed-message"] i,
+                [data-testid="active-message"] em,[data-testid="active-message"] i,
+                [data-testid="generating-message"] em,[data-testid="generating-message"] i,
+                [data-testid="streaming-message"] em,[data-testid="streaming-message"] i`;
             if (italicEnabled) {
-                css += `[data-testid="completed-message"] em,[data-testid="completed-message"] i { color: ${italicColor} !important; font-style: italic !important; }`;
+                css += `${ITALIC_SEL} { color: ${italicColor} !important; font-style: italic !important; }`;
             } else {
-                css += `[data-testid="completed-message"] em,[data-testid="completed-message"] i { font-style: italic !important; }`;
+                css += `${ITALIC_SEL} { font-style: italic !important; }`;
             }
 
             // Bold
+            const BOLD_SEL = `[data-testid="completed-message"] strong,[data-testid="completed-message"] b,
+                [data-testid="active-message"] strong,[data-testid="active-message"] b,
+                [data-testid="generating-message"] strong,[data-testid="generating-message"] b,
+                [data-testid="streaming-message"] strong,[data-testid="streaming-message"] b`;
             if (boldEnabled) {
-                css += `[data-testid="completed-message"] strong,[data-testid="completed-message"] b { color: ${boldColor} !important; font-weight: 700 !important; }`;
+                css += `${BOLD_SEL} { color: ${boldColor} !important; font-weight: 700 !important; }`;
             } else {
-                css += `[data-testid="completed-message"] strong,[data-testid="completed-message"] b { font-weight: 700 !important; }`;
+                css += `${BOLD_SEL} { font-weight: 700 !important; }`;
             }
 
             return css;
         }
 
         function applyStyles() {
-            const fontName = GM_getValue(STORAGE.fontFamily, 'Inter');
-            const customUrl = GM_getValue(STORAGE.fontCustomUrl, '');
+            const fontName = STATE.fontFamily || 'Inter';
+            const customUrl = STATE.fontCustomUrl || '';
             if (customUrl && customUrl.trim() !== '') loadGoogleFont('Custom Font', customUrl);
             else if (GOOGLE_FONTS[fontName]) loadGoogleFont(fontName);
 
@@ -360,14 +394,14 @@ ${MSG} .prose *,
         }
 
         function applyBackground() {
-            const bgType = GM_getValue(STORAGE.bgType, 'none');
-            const blur = GM_getValue(STORAGE.bgBlur, '0px');
-            const brightness = GM_getValue(STORAGE.bgBrightness, '100%');
-            const overlayColor = GM_getValue(STORAGE.bgOverlayColor, '#000000');
-            const overlayOpacity = GM_getValue(STORAGE.bgOverlayOpacity, '0');
+            const bgType = STATE.bgType || 'none';
+            const blur = STATE.bgBlur || '0px';
+            const brightness = STATE.bgBrightness || '100%';
+            const overlayColor = STATE.bgOverlayColor || '#000000';
+            const overlayOpacity = STATE.bgOverlayOpacity || '0';
             let bgImage = '';
-            if (bgType === 'url') bgImage = GM_getValue(STORAGE.bgUrl, '');
-            if (bgType === 'file') bgImage = GM_getValue(STORAGE.bgFile, '');
+            if (bgType === 'url') bgImage = STATE.bgUrl || '';
+            if (bgType === 'file') bgImage = STATE.bgFile || '';
             const layer = ensureBackgroundLayer();
             layer.style.backgroundImage = bgImage ? `url(${bgImage})` : 'none';
             if (bgImage) { layer.style.backgroundSize = 'cover'; layer.style.backgroundPosition = 'center'; layer.style.backgroundAttachment = 'fixed'; }
@@ -386,6 +420,13 @@ ${MSG} .prose *,
             document.body.style.backgroundColor = bgImage ? 'transparent' : '';
         }
 
+        function applyAll() {
+            applyBackground();
+            applyStyles();
+            syncUIWithSettings();
+            updateCornerPreviews();
+        }
+
         // ============================================
         // PRESET MANAGER
         // ============================================
@@ -401,17 +442,11 @@ ${MSG} .prose *,
         function applySettings(settings) {
             for (const [key, storageKey] of Object.entries(STORAGE)) {
                 const value = settings[key];
-                if (value !== undefined && value !== null) {
-                    GM_setValue(storageKey, value);
-                } else {
-                    // Key not in preset — reset to default (turns off toggles, restores defaults)
-                    const def = DEFAULTS[key];
-                    if (def !== undefined) GM_setValue(storageKey, def);
-                }
+                const resolved = (value !== undefined && value !== null) ? value : (DEFAULTS[key] !== undefined ? DEFAULTS[key] : '');
+                GM_setValue(storageKey, resolved);
+                STATE[key] = resolved;
             }
-            applyBackground();
-            applyStyles();
-            syncUIWithSettings();
+            applyAll();
             showNotification('Preset loaded successfully!', 'success');
         }
 
@@ -474,6 +509,18 @@ ${MSG} .prose *,
                 } catch (err) { showNotification('Invalid preset file: ' + err.message, 'error'); }
             };
             reader.readAsText(file);
+
+            if (file.size > 1024 * 1024) {
+                showNotification('Preset file too large (max 1MB)', 'error');
+                return;
+            }
+
+            if (!file.name.endsWith('.json')) {
+                showNotification('Invalid preset file - expected .json', 'error');
+                return;
+            }
+
+
         }
 
         function loadPresetList() {
@@ -521,95 +568,91 @@ ${MSG} .prose *,
             if (btn) btn.style.borderColor = color;
         }
 
+        function setEl(id, prop, value) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            if (prop === 'value') el.value = value;
+            else if (prop === 'checked') el.checked = value;
+            else if (prop === 'text') el.textContent = value;
+        }
+
         function syncUIWithSettings() {
-            // Bubble mode
-            const bubbleMode = GM_getValue(STORAGE.bubbleMode, 'global');
-            if (document.getElementById('cai-bubble-mode')) document.getElementById('cai-bubble-mode').value = bubbleMode;
+            const s = STATE;
 
-            const globalColor = GM_getValue(STORAGE.bubbleGlobal, '#2d2d3d');
-            const aiColor = GM_getValue(STORAGE.bubbleAi, '#2d2d3d');
-            const userColor = GM_getValue(STORAGE.bubbleUser, '#1a1a2e');
-            if (document.getElementById('cai-global-color')) { document.getElementById('cai-global-color').value = globalColor; updateColorBtnBorder('cai-global-color-btn', globalColor); }
-            if (document.getElementById('cai-ai-color')) { document.getElementById('cai-ai-color').value = aiColor; updateColorBtnBorder('cai-ai-color-btn', aiColor); }
-            if (document.getElementById('cai-user-color')) { document.getElementById('cai-user-color').value = userColor; updateColorBtnBorder('cai-user-color-btn', userColor); }
-
-            // Show/hide based on bubble mode
-            document.getElementById('cai-global-color-group')?.classList.toggle('cai-hidden', bubbleMode !== 'global');
-            document.getElementById('cai-separate-color-group')?.classList.toggle('cai-hidden', bubbleMode !== 'separate');
+            // Bubble
+            setEl('cai-bubble-mode',        'value',   s.bubbleMode);
+            setEl('cai-global-color',        'value',   s.bubbleGlobal);
+            setEl('cai-ai-color',            'value',   s.bubbleAi);
+            setEl('cai-user-color',          'value',   s.bubbleUser);
+            updateColorBtnBorder('cai-global-color-btn', s.bubbleGlobal);
+            updateColorBtnBorder('cai-ai-color-btn',     s.bubbleAi);
+            updateColorBtnBorder('cai-user-color-btn',   s.bubbleUser);
+            document.getElementById('cai-global-color-group')?.classList.toggle('cai-hidden', s.bubbleMode !== 'global');
+            document.getElementById('cai-separate-color-group')?.classList.toggle('cai-hidden', s.bubbleMode !== 'separate');
 
             // Spacing
-            const spacing = parseInt(GM_getValue(STORAGE.bubbleSpacing, '8'));
-            if (document.getElementById('cai-message-spacing')) { document.getElementById('cai-message-spacing').value = spacing; }
-            if (document.getElementById('cai-spacing-val')) document.getElementById('cai-spacing-val').textContent = spacing;
+            const spacing = parseInt(s.bubbleSpacing) || 8;
+            setEl('cai-message-spacing', 'value', spacing);
+            setEl('cai-spacing-val',     'text',  spacing);
 
             // Glass
-            const glassEnabled = GM_getValue(STORAGE.glassEnabled, false);
-            if (document.getElementById('cai-glass-enabled')) document.getElementById('cai-glass-enabled').checked = glassEnabled;
-            const glassBlurV = GM_getValue(STORAGE.glassBlur, '10');
-            const glassOpacityV = GM_getValue(STORAGE.glassOpacity, '0.7');
-            if (document.getElementById('cai-glass-blur')) { document.getElementById('cai-glass-blur').value = glassBlurV; if(document.getElementById('cai-glass-blur-val')) document.getElementById('cai-glass-blur-val').textContent = glassBlurV + 'px'; }
-            if (document.getElementById('cai-glass-opacity')) { document.getElementById('cai-glass-opacity').value = glassOpacityV; if(document.getElementById('cai-glass-opacity-val')) document.getElementById('cai-glass-opacity-val').textContent = Math.round(parseFloat(glassOpacityV)*100)+'%'; }
+            setEl('cai-glass-enabled',      'checked', s.glassEnabled);
+            setEl('cai-glass-blur',          'value',   s.glassBlur);
+            setEl('cai-glass-blur-val',      'text',    s.glassBlur + 'px');
+            setEl('cai-glass-opacity',       'value',   s.glassOpacity);
+            setEl('cai-glass-opacity-val',   'text',    Math.round(parseFloat(s.glassOpacity) * 100) + '%');
 
             // Border
-            const borderEnabled = GM_getValue(STORAGE.borderEnabled, false);
-            if (document.getElementById('cai-border-enabled')) document.getElementById('cai-border-enabled').checked = borderEnabled;
-            const borderWidthV = GM_getValue(STORAGE.borderWidth, '2');
-            if (document.getElementById('cai-border-width')) { document.getElementById('cai-border-width').value = borderWidthV; if(document.getElementById('cai-border-width-val')) document.getElementById('cai-border-width-val').textContent = borderWidthV + 'px'; }
-            const bColor = GM_getValue(STORAGE.borderColor, '#ffffff');
-            if (document.getElementById('cai-border-color')) { document.getElementById('cai-border-color').value = bColor; updateColorBtnBorder('cai-border-color-btn', bColor); }
+            setEl('cai-border-enabled',     'checked', s.borderEnabled);
+            setEl('cai-border-width',        'value',   s.borderWidth);
+            setEl('cai-border-width-val',    'text',    s.borderWidth + 'px');
+            setEl('cai-border-color',        'value',   s.borderColor);
+            updateColorBtnBorder('cai-border-color-btn', s.borderColor);
 
             // Shadow
-            const shadowEnabled = GM_getValue(STORAGE.shadowEnabled, false);
-            if (document.getElementById('cai-shadow-enabled')) document.getElementById('cai-shadow-enabled').checked = shadowEnabled;
-            const shadowBlurV = GM_getValue(STORAGE.shadowBlur, '12');
-            const shadowOffY = GM_getValue(STORAGE.shadowOffsetY, '4');
-            const shadowOpV = GM_getValue(STORAGE.shadowOpacity, '0.3');
-            if (document.getElementById('cai-shadow-blur')) { document.getElementById('cai-shadow-blur').value = shadowBlurV; if(document.getElementById('cai-shadow-blur-val')) document.getElementById('cai-shadow-blur-val').textContent = shadowBlurV + 'px'; }
-            if (document.getElementById('cai-shadow-offset-y')) { document.getElementById('cai-shadow-offset-y').value = shadowOffY; if(document.getElementById('cai-shadow-offset-y-val')) document.getElementById('cai-shadow-offset-y-val').textContent = shadowOffY + 'px'; }
-            if (document.getElementById('cai-shadow-opacity')) { document.getElementById('cai-shadow-opacity').value = shadowOpV; if(document.getElementById('cai-shadow-opacity-val')) document.getElementById('cai-shadow-opacity-val').textContent = Math.round(parseFloat(shadowOpV)*100)+'%'; }
-            const sColor = GM_getValue(STORAGE.shadowColor, '#000000');
-            if (document.getElementById('cai-shadow-color')) { document.getElementById('cai-shadow-color').value = sColor; updateColorBtnBorder('cai-shadow-color-btn', sColor); }
+            setEl('cai-shadow-enabled',     'checked', s.shadowEnabled);
+            setEl('cai-shadow-blur',         'value',   s.shadowBlur);
+            setEl('cai-shadow-blur-val',     'text',    s.shadowBlur + 'px');
+            setEl('cai-shadow-offset-y',     'value',   s.shadowOffsetY);
+            setEl('cai-shadow-offset-y-val', 'text',    s.shadowOffsetY + 'px');
+            setEl('cai-shadow-opacity',      'value',   s.shadowOpacity);
+            setEl('cai-shadow-opacity-val',  'text',    Math.round(parseFloat(s.shadowOpacity) * 100) + '%');
+            setEl('cai-shadow-color',        'value',   s.shadowColor);
+            updateColorBtnBorder('cai-shadow-color-btn', s.shadowColor);
 
             // Font
-            const fontName = GM_getValue(STORAGE.fontFamily, 'Inter');
-            if (document.getElementById('cai-font-family')) document.getElementById('cai-font-family').value = fontName;
-            const fontCustomUrl = GM_getValue(STORAGE.fontCustomUrl, '');
-            if (document.getElementById('cai-custom-font-url')) document.getElementById('cai-custom-font-url').value = fontCustomUrl;
-            // Show/hide custom URL input
-            document.getElementById('cai-custom-font-group')?.classList.toggle('cai-hidden', fontName !== 'custom');
-
-            const fontSizeV = parseInt(GM_getValue(STORAGE.fontSize, '14'));
-            if (document.getElementById('cai-font-size')) { document.getElementById('cai-font-size').value = fontSizeV; if(document.getElementById('cai-fontsize-val')) document.getElementById('cai-fontsize-val').textContent = fontSizeV + 'px'; }
-            if (document.getElementById('cai-font-weight')) document.getElementById('cai-font-weight').value = GM_getValue(STORAGE.fontWeight, '400');
-            const lineH = parseFloat(GM_getValue(STORAGE.lineHeight, '1.5'));
-            if (document.getElementById('cai-line-height')) { document.getElementById('cai-line-height').value = lineH; if(document.getElementById('cai-lineheight-val')) document.getElementById('cai-lineheight-val').textContent = lineH; }
+            setEl('cai-font-family',    'value', s.fontFamily);
+            setEl('cai-custom-font-url','value', s.fontCustomUrl);
+            setEl('cai-font-size',      'value', parseInt(s.fontSize) || 14);
+            setEl('cai-fontsize-val',   'text',  (parseInt(s.fontSize) || 14) + 'px');
+            setEl('cai-font-weight',    'value', s.fontWeight);
+            setEl('cai-line-height',    'value', s.lineHeight);
+            setEl('cai-lineheight-val', 'text',  s.lineHeight);
+            document.getElementById('cai-custom-font-group')?.classList.toggle('cai-hidden', s.fontFamily !== 'custom');
 
             // Text colors
-            const textColorMode = GM_getValue(STORAGE.textColorMode, 'global');
-            if (document.getElementById('cai-text-color-mode')) document.getElementById('cai-text-color-mode').value = textColorMode;
-            // Show/hide global vs separate groups
-            document.getElementById('cai-text-global-group')?.classList.toggle('cai-hidden', textColorMode !== 'global');
-            document.getElementById('cai-text-separate-group')?.classList.toggle('cai-hidden', textColorMode !== 'separate');
+            setEl('cai-text-color-mode',     'value', s.textColorMode);
+            setEl('cai-text-global-color',   'value', s.textColorGlobal);
+            setEl('cai-text-ai-color',       'value', s.textColorAi);
+            setEl('cai-text-user-color',     'value', s.textColorUser);
+            updateColorBtnBorder('cai-text-global-color-btn', s.textColorGlobal);
+            updateColorBtnBorder('cai-text-ai-color-btn',     s.textColorAi);
+            updateColorBtnBorder('cai-text-user-color-btn',   s.textColorUser);
+            document.getElementById('cai-text-global-group')?.classList.toggle('cai-hidden', s.textColorMode !== 'global');
+            document.getElementById('cai-text-separate-group')?.classList.toggle('cai-hidden', s.textColorMode !== 'separate');
 
-            const tgColor = GM_getValue(STORAGE.textColorGlobal, '#e0e0e0');
-            const taColor = GM_getValue(STORAGE.textColorAi, '#e0e0e0');
-            const tuColor = GM_getValue(STORAGE.textColorUser, '#e0e0e0');
-            if (document.getElementById('cai-text-global-color')) { document.getElementById('cai-text-global-color').value = tgColor; updateColorBtnBorder('cai-text-global-color-btn', tgColor); }
-            if (document.getElementById('cai-text-ai-color')) { document.getElementById('cai-text-ai-color').value = taColor; updateColorBtnBorder('cai-text-ai-color-btn', taColor); }
-            if (document.getElementById('cai-text-user-color')) { document.getElementById('cai-text-user-color').value = tuColor; updateColorBtnBorder('cai-text-user-color-btn', tuColor); }
-
-            // Italic / bold
-            const iColor = GM_getValue(STORAGE.textItalicColor, '#a855f7');
-            const bldColor = GM_getValue(STORAGE.textBoldColor, '#f59e0b');
-            if (document.getElementById('cai-italic-color')) { document.getElementById('cai-italic-color').value = iColor; updateColorBtnBorder('cai-italic-color-btn', iColor); }
-            if (document.getElementById('cai-bold-color')) { document.getElementById('cai-bold-color').value = bldColor; updateColorBtnBorder('cai-bold-color-btn', bldColor); }
-            if (document.getElementById('cai-italic-enabled')) document.getElementById('cai-italic-enabled').checked = GM_getValue(STORAGE.textItalicEnabled, false);
-            if (document.getElementById('cai-bold-enabled')) document.getElementById('cai-bold-enabled').checked = GM_getValue(STORAGE.textBoldEnabled, false);
+            // Italic / Bold
+            setEl('cai-italic-enabled', 'checked', s.textItalicEnabled);
+            setEl('cai-bold-enabled',   'checked', s.textBoldEnabled);
+            setEl('cai-italic-color',   'value',   s.textItalicColor);
+            setEl('cai-bold-color',     'value',   s.textBoldColor);
+            updateColorBtnBorder('cai-italic-color-btn', s.textItalicColor);
+            updateColorBtnBorder('cai-bold-color-btn',   s.textBoldColor);
 
             // Corners
-            const cornerMode = GM_getValue(STORAGE.cornerMode, 'uniform');
+            const cornerMode = s.cornerMode || 'uniform';
             const uniformBtn = document.getElementById('cai-corner-uniform');
-            const customBtn = document.getElementById('cai-corner-custom');
+            const customBtn  = document.getElementById('cai-corner-custom');
             if (cornerMode === 'uniform') {
                 uniformBtn?.classList.add('active'); customBtn?.classList.remove('active');
                 document.getElementById('cai-uniform-group')?.classList.remove('cai-hidden');
@@ -619,34 +662,36 @@ ${MSG} .prose *,
                 document.getElementById('cai-custom-group')?.classList.remove('cai-hidden');
                 document.getElementById('cai-uniform-group')?.classList.add('cai-hidden');
             }
-            const tlV = GM_getValue(STORAGE.cornerTopLeft, '18');
-            if (document.getElementById('cai-uniform-radius')) { document.getElementById('cai-uniform-radius').value = tlV; if(document.getElementById('cai-uniform-val')) document.getElementById('cai-uniform-val').textContent = tlV + 'px'; }
-            if (document.getElementById('cai-corner-tl')) { document.getElementById('cai-corner-tl').value = GM_getValue(STORAGE.cornerTopLeft,'18'); if(document.getElementById('cai-tl-val')) document.getElementById('cai-tl-val').textContent = GM_getValue(STORAGE.cornerTopLeft,'18') + 'px'; }
-            if (document.getElementById('cai-corner-tr')) { document.getElementById('cai-corner-tr').value = GM_getValue(STORAGE.cornerTopRight,'18'); if(document.getElementById('cai-tr-val')) document.getElementById('cai-tr-val').textContent = GM_getValue(STORAGE.cornerTopRight,'18') + 'px'; }
-            if (document.getElementById('cai-corner-br')) { document.getElementById('cai-corner-br').value = GM_getValue(STORAGE.cornerBottomRight,'18'); if(document.getElementById('cai-br-val')) document.getElementById('cai-br-val').textContent = GM_getValue(STORAGE.cornerBottomRight,'18') + 'px'; }
-            if (document.getElementById('cai-corner-bl')) { document.getElementById('cai-corner-bl').value = GM_getValue(STORAGE.cornerBottomLeft,'18'); if(document.getElementById('cai-bl-val')) document.getElementById('cai-bl-val').textContent = GM_getValue(STORAGE.cornerBottomLeft,'18') + 'px'; }
+            setEl('cai-uniform-radius', 'value', s.cornerTopLeft);
+            setEl('cai-uniform-val',    'text',  s.cornerTopLeft + 'px');
+            setEl('cai-corner-tl',      'value', s.cornerTopLeft);
+            setEl('cai-tl-val',         'text',  s.cornerTopLeft + 'px');
+            setEl('cai-corner-tr',      'value', s.cornerTopRight);
+            setEl('cai-tr-val',         'text',  s.cornerTopRight + 'px');
+            setEl('cai-corner-br',      'value', s.cornerBottomRight);
+            setEl('cai-br-val',         'text',  s.cornerBottomRight + 'px');
+            setEl('cai-corner-bl',      'value', s.cornerBottomLeft);
+            setEl('cai-bl-val',         'text',  s.cornerBottomLeft + 'px');
 
             // Background
-            const bgType = GM_getValue(STORAGE.bgType, 'none');
-            if (document.getElementById('cai-bg-type')) document.getElementById('cai-bg-type').value = bgType;
-            document.getElementById('cai-url-input')?.classList.toggle('cai-hidden', bgType !== 'url');
-            document.getElementById('cai-file-input')?.classList.toggle('cai-hidden', bgType !== 'file');
-            const bgBlurV = parseInt(GM_getValue(STORAGE.bgBlur, '0'));
-            if (document.getElementById('cai-bg-blur')) { document.getElementById('cai-bg-blur').value = bgBlurV; if(document.getElementById('cai-blur-val')) document.getElementById('cai-blur-val').textContent = bgBlurV + 'px'; }
-            const bgBrightV = parseInt(GM_getValue(STORAGE.bgBrightness, '100'));
-            if (document.getElementById('cai-bg-brightness')) { document.getElementById('cai-bg-brightness').value = bgBrightV; if(document.getElementById('cai-bright-val')) document.getElementById('cai-bright-val').textContent = bgBrightV + '%'; }
-            const overlayOpV = parseFloat(GM_getValue(STORAGE.bgOverlayOpacity, '0'));
-            if (document.getElementById('cai-overlay-opacity')) { document.getElementById('cai-overlay-opacity').value = overlayOpV; if(document.getElementById('cai-overlay-val')) document.getElementById('cai-overlay-val').textContent = overlayOpV + '%'; }
-            const oColor = GM_getValue(STORAGE.bgOverlayColor, '#000000');
-            if (document.getElementById('cai-overlay-color')) { document.getElementById('cai-overlay-color').value = oColor; updateColorBtnBorder('cai-overlay-color-btn', oColor); }
+            setEl('cai-bg-type',       'value', s.bgType);
+            setEl('cai-bg-blur',       'value', parseInt(s.bgBlur) || 0);
+            setEl('cai-blur-val',      'text',  (parseInt(s.bgBlur) || 0) + 'px');
+            setEl('cai-bg-brightness', 'value', parseInt(s.bgBrightness) || 100);
+            setEl('cai-bright-val',    'text',  (parseInt(s.bgBrightness) || 100) + '%');
+            setEl('cai-overlay-opacity','value', parseFloat(s.bgOverlayOpacity) || 0);
+            setEl('cai-overlay-val',   'text',  (parseFloat(s.bgOverlayOpacity) || 0) + '%');
+            setEl('cai-overlay-color', 'value', s.bgOverlayColor);
+            updateColorBtnBorder('cai-overlay-color-btn', s.bgOverlayColor);
+            document.getElementById('cai-url-input')?.classList.toggle('cai-hidden', s.bgType !== 'url');
+            document.getElementById('cai-file-input')?.classList.toggle('cai-hidden', s.bgType !== 'file');
+
+            // Misc
+            setEl('cai-disclaimer-toggle', 'checked', GM_getValue('cai_disclaimers_hidden', false));
 
             updateCornerPreviews();
-
-            // Miscellaneous
-            if (document.getElementById('cai-disclaimer-toggle')) {
-                document.getElementById('cai-disclaimer-toggle').checked = GM_getValue('cai_disclaimers_hidden', false);
-            }
         }
+
 
         // ============================================
         // RESET FUNCTIONS — fully restore defaults incl. toggled features
@@ -667,10 +712,11 @@ ${MSG} .prose *,
             toReset.forEach(key => {
                 if (STORAGE[key] !== undefined && DEFAULTS[key] !== undefined) {
                     GM_setValue(STORAGE[key], DEFAULTS[key]);
+                    STATE[key] = DEFAULTS[key];
                 }
             });
             if (category === 'typography') cleanupOldFonts();
-            applyBackground(); applyStyles(); syncUIWithSettings(); updateCornerPreviews();
+            applyAll();
             const labels = { background:'Background', bubbles:'Bubble', corners:'Corners', typography:'Typography' };
             showNotification(`${labels[category]||category} reset to default`, 'info');
         }
@@ -689,14 +735,14 @@ ${MSG} .prose *,
         // CORNER PREVIEWS
         // ============================================
         function updateCornerPreviews() {
-            const mode = GM_getValue(STORAGE.cornerMode, 'uniform');
+            const mode = STATE.cornerMode || 'uniform';
             if (mode === 'uniform') {
-                const r = GM_getValue(STORAGE.cornerTopLeft, '18');
+                const r = STATE.cornerTopLeft || '18';
                 const p = document.getElementById('cai-uniform-preview');
                 if (p) p.style.borderRadius = `${r}px`;
             } else {
-                const tl = GM_getValue(STORAGE.cornerTopLeft,'18'), tr = GM_getValue(STORAGE.cornerTopRight,'18');
-                const br = GM_getValue(STORAGE.cornerBottomRight,'18'), bl = GM_getValue(STORAGE.cornerBottomLeft,'18');
+                const tl = STATE.cornerTopLeft || '18', tr = STATE.cornerTopRight || '18';
+                const br = STATE.cornerBottomRight || '18', bl = STATE.cornerBottomLeft || '18';
                 const p = document.getElementById('cai-custom-preview');
                 if (p) p.style.borderRadius = `${tl}px ${tr}px ${br}px ${bl}px`;
             }
@@ -1189,42 +1235,45 @@ ${MSG} .prose *,
             document.querySelectorAll('.cai-reset-btn').forEach(btn => btn.addEventListener('click', () => resetCategory(btn.dataset.category)));
 
             // Background type
-            document.getElementById('cai-bg-type')?.addEventListener('change', e => {
-                GM_setValue(STORAGE.bgType, e.target.value);
+            document.getElementById("cai-bg-type")?.addEventListener("change", (e) => {
+                saveState("bgType", e.target.value);
+                if (e.target.value !== "url") saveState("bgUrl", "");
+                if (e.target.value !== "file") saveState("bgFile", "");
                 document.getElementById('cai-url-input')?.classList.toggle('cai-hidden', e.target.value !== 'url');
                 document.getElementById('cai-file-input')?.classList.toggle('cai-hidden', e.target.value !== 'file');
                 applyBackground();
             });
             document.getElementById('cai-apply-bg')?.addEventListener('click', () => {
                 const url = document.getElementById('cai-bg-url')?.value;
-                if (url) { GM_setValue(STORAGE.bgUrl, url); GM_setValue(STORAGE.bgType, 'url'); applyBackground(); showNotification('Background applied', 'success'); }
+                if (url) { saveState('bgUrl', url); saveState('bgType', 'url'); applyBackground(); showNotification('Background applied', 'success'); }
                 else showNotification('Enter a valid URL', 'error');
             });
             document.getElementById('cai-bg-file')?.addEventListener('change', e => {
                 const file = e.target.files[0];
-                if (file) { const r = new FileReader(); r.onload = ev => { GM_setValue(STORAGE.bgFile, ev.target.result); GM_setValue(STORAGE.bgType, 'file'); applyBackground(); showNotification('Background loaded', 'success'); }; r.readAsDataURL(file); }
+                if (file) { const r = new FileReader(); r.onload = ev => { saveState('bgFile', ev.target.result); saveState('bgType', 'file'); applyBackground(); showNotification('Background loaded', 'success'); }; r.readAsDataURL(file); }
             });
 
             // Sliders
             const sliders = [
-                ['cai-bg-blur','cai-blur-val','px', v => { GM_setValue(STORAGE.bgBlur, v+'px'); applyBackground(); }, false],
-                ['cai-bg-brightness','cai-bright-val','%', v => { GM_setValue(STORAGE.bgBrightness, v+'%'); applyBackground(); }, false],
-                ['cai-overlay-opacity','cai-overlay-val','%', v => { GM_setValue(STORAGE.bgOverlayOpacity, v); applyBackground(); }, false],
-                ['cai-message-spacing','cai-spacing-val','px', v => { GM_setValue(STORAGE.bubbleSpacing, v+'px'); applyStyles(); }, false],
-                ['cai-glass-blur','cai-glass-blur-val','px', v => { GM_setValue(STORAGE.glassBlur, v); applyStyles(); }, false],
-                ['cai-glass-opacity','cai-glass-opacity-val','%', v => { GM_setValue(STORAGE.glassOpacity, v); applyStyles(); }, true],
-                ['cai-border-width','cai-border-width-val','px', v => { GM_setValue(STORAGE.borderWidth, v); applyStyles(); }, false],
-                ['cai-shadow-blur','cai-shadow-blur-val','px', v => { GM_setValue(STORAGE.shadowBlur, v); applyStyles(); }, false],
-                ['cai-shadow-offset-y','cai-shadow-offset-y-val','px', v => { GM_setValue(STORAGE.shadowOffsetY, v); applyStyles(); }, false],
-                ['cai-shadow-opacity','cai-shadow-opacity-val','%', v => { GM_setValue(STORAGE.shadowOpacity, v); applyStyles(); }, true],
-                ['cai-font-size','cai-fontsize-val','px', v => { GM_setValue(STORAGE.fontSize, v+'px'); applyStyles(); }, false],
-                ['cai-line-height','cai-lineheight-val','', v => { GM_setValue(STORAGE.lineHeight, v); applyStyles(); }, false],
-                ['cai-uniform-radius','cai-uniform-val','px', v => { ['cornerTopLeft','cornerTopRight','cornerBottomRight','cornerBottomLeft'].forEach(k => GM_setValue(STORAGE[k], v)); updateCornerPreviews(); applyStyles(); }, false],
-                ['cai-corner-tl','cai-tl-val','px', v => { GM_setValue(STORAGE.cornerTopLeft, v); updateCornerPreviews(); applyStyles(); }, false],
-                ['cai-corner-tr','cai-tr-val','px', v => { GM_setValue(STORAGE.cornerTopRight, v); updateCornerPreviews(); applyStyles(); }, false],
-                ['cai-corner-br','cai-br-val','px', v => { GM_setValue(STORAGE.cornerBottomRight, v); updateCornerPreviews(); applyStyles(); }, false],
-                ['cai-corner-bl','cai-bl-val','px', v => { GM_setValue(STORAGE.cornerBottomLeft, v); updateCornerPreviews(); applyStyles(); }, false],
+                ['cai-bg-blur','cai-blur-val','px', v => { saveState('bgBlur', v+'px'); applyBackground(); }, false],
+                ['cai-bg-brightness','cai-bright-val','%', v => { saveState('bgBrightness', v+'%'); applyBackground(); }, false],
+                ['cai-overlay-opacity','cai-overlay-val','%', v => { saveState('bgOverlayOpacity', v); applyBackground(); }, false],
+                ['cai-message-spacing','cai-spacing-val','px', v => { saveState('bubbleSpacing', v+'px'); applyStyles(); }, false],
+                ['cai-glass-blur','cai-glass-blur-val','px', v => { saveState('glassBlur', v); applyStyles(); }, false],
+                ['cai-glass-opacity','cai-glass-opacity-val','%', v => { saveState('glassOpacity', v); applyStyles(); }, true],
+                ['cai-border-width','cai-border-width-val','px', v => { saveState('borderWidth', v); applyStyles(); }, false],
+                ['cai-shadow-blur','cai-shadow-blur-val','px', v => { saveState('shadowBlur', v); applyStyles(); }, false],
+                ['cai-shadow-offset-y','cai-shadow-offset-y-val','px', v => { saveState('shadowOffsetY', v); applyStyles(); }, false],
+                ['cai-shadow-opacity','cai-shadow-opacity-val','%', v => { saveState('shadowOpacity', v); applyStyles(); }, true],
+                ['cai-font-size','cai-fontsize-val','px', v => { saveState('fontSize', v+'px'); applyStyles(); }, false],
+                ['cai-line-height','cai-lineheight-val','', v => { saveState('lineHeight', v); applyStyles(); }, false],
+                ['cai-uniform-radius','cai-uniform-val','px', v => { ['cornerTopLeft','cornerTopRight','cornerBottomRight','cornerBottomLeft'].forEach(k => saveState(k, v)); updateCornerPreviews(); applyStyles(); }, false],
+                ['cai-corner-tl','cai-tl-val','px', v => { saveState('cornerTopLeft', v); updateCornerPreviews(); applyStyles(); }, false],
+                ['cai-corner-tr','cai-tr-val','px', v => { saveState('cornerTopRight', v); updateCornerPreviews(); applyStyles(); }, false],
+                ['cai-corner-br','cai-br-val','px', v => { saveState('cornerBottomRight', v); updateCornerPreviews(); applyStyles(); }, false],
+                ['cai-corner-bl','cai-bl-val','px', v => { saveState('cornerBottomLeft', v); updateCornerPreviews(); applyStyles(); }, false],
             ];
+
             sliders.forEach(([sid, vid, suffix, fn, isPercent]) => {
                 const slider = document.getElementById(sid), valEl = document.getElementById(vid);
                 if (slider && valEl) slider.addEventListener('input', e => {
@@ -1235,52 +1284,52 @@ ${MSG} .prose *,
 
             // Color pickers
             const colors = [
-                ['cai-overlay-color','cai-overlay-color-btn', STORAGE.bgOverlayColor, () => applyBackground()],
-                ['cai-global-color','cai-global-color-btn', STORAGE.bubbleGlobal, () => applyStyles()],
-                ['cai-ai-color','cai-ai-color-btn', STORAGE.bubbleAi, () => applyStyles()],
-                ['cai-user-color','cai-user-color-btn', STORAGE.bubbleUser, () => applyStyles()],
-                ['cai-border-color','cai-border-color-btn', STORAGE.borderColor, () => applyStyles()],
-                ['cai-shadow-color','cai-shadow-color-btn', STORAGE.shadowColor, () => applyStyles()],
-                ['cai-text-global-color','cai-text-global-color-btn', STORAGE.textColorGlobal, () => applyStyles()],
-                ['cai-text-ai-color','cai-text-ai-color-btn', STORAGE.textColorAi, () => applyStyles()],
-                ['cai-text-user-color','cai-text-user-color-btn', STORAGE.textColorUser, () => applyStyles()],
-                ['cai-italic-color','cai-italic-color-btn', STORAGE.textItalicColor, () => applyStyles()],
-                ['cai-bold-color','cai-bold-color-btn', STORAGE.textBoldColor, () => applyStyles()],
+                ['cai-overlay-color','cai-overlay-color-btn', 'bgOverlayColor', () => applyBackground()],
+                ['cai-global-color','cai-global-color-btn', 'bubbleGlobal', () => applyStyles()],
+                ['cai-ai-color','cai-ai-color-btn', 'bubbleAi', () => applyStyles()],
+                ['cai-user-color','cai-user-color-btn', 'bubbleUser', () => applyStyles()],
+                ['cai-border-color','cai-border-color-btn', 'borderColor', () => applyStyles()],
+                ['cai-shadow-color','cai-shadow-color-btn', 'shadowColor', () => applyStyles()],
+                ['cai-text-global-color','cai-text-global-color-btn', 'textColorGlobal', () => applyStyles()],
+                ['cai-text-ai-color','cai-text-ai-color-btn', 'textColorAi', () => applyStyles()],
+                ['cai-text-user-color','cai-text-user-color-btn', 'textColorUser', () => applyStyles()],
+                ['cai-italic-color','cai-italic-color-btn', 'textItalicColor', () => applyStyles()],
+                ['cai-bold-color','cai-bold-color-btn', 'textBoldColor', () => applyStyles()],
             ];
-            colors.forEach(([inputId, btnId, storageKey, fn]) => {
+            colors.forEach(([inputId, btnId, stateKey, fn]) => {
                 const input = document.getElementById(inputId), btn = document.getElementById(btnId);
-                if (input) input.addEventListener('input', e => { GM_setValue(storageKey, e.target.value); if(btn) btn.style.borderColor = e.target.value; fn(); });
+                if (input) input.addEventListener('input', e => { saveState(stateKey, e.target.value); if(btn) btn.style.borderColor = e.target.value; fn(); });
             });
 
             // Bubble mode
             document.getElementById('cai-bubble-mode')?.addEventListener('change', e => {
-                GM_setValue(STORAGE.bubbleMode, e.target.value);
+                saveState('bubbleMode', e.target.value);
                 document.getElementById('cai-global-color-group')?.classList.toggle('cai-hidden', e.target.value !== 'global');
                 document.getElementById('cai-separate-color-group')?.classList.toggle('cai-hidden', e.target.value !== 'separate');
                 applyStyles();
             });
 
             // Toggles
-            document.getElementById('cai-glass-enabled')?.addEventListener('change', e => { GM_setValue(STORAGE.glassEnabled, e.target.checked); applyStyles(); });
-            document.getElementById('cai-border-enabled')?.addEventListener('change', e => { GM_setValue(STORAGE.borderEnabled, e.target.checked); applyStyles(); });
-            document.getElementById('cai-shadow-enabled')?.addEventListener('change', e => { GM_setValue(STORAGE.shadowEnabled, e.target.checked); applyStyles(); });
-            document.getElementById('cai-italic-enabled')?.addEventListener('change', e => { GM_setValue(STORAGE.textItalicEnabled, e.target.checked); applyStyles(); });
-            document.getElementById('cai-bold-enabled')?.addEventListener('change', e => { GM_setValue(STORAGE.textBoldEnabled, e.target.checked); applyStyles(); });
+           document.getElementById('cai-glass-enabled')?.addEventListener('change', e => { saveState('glassEnabled', e.target.checked); applyStyles(); });
+            document.getElementById('cai-border-enabled')?.addEventListener('change', e => { saveState('borderEnabled', e.target.checked); applyStyles(); });
+            document.getElementById('cai-shadow-enabled')?.addEventListener('change', e => { saveState('shadowEnabled', e.target.checked); applyStyles(); });
+            document.getElementById('cai-italic-enabled')?.addEventListener('change', e => { saveState('textItalicEnabled', e.target.checked); applyStyles(); });
+            document.getElementById('cai-bold-enabled')?.addEventListener('change', e => { saveState('textBoldEnabled', e.target.checked); applyStyles(); });
 
             // Font family — show/hide custom URL field immediately on change
             document.getElementById('cai-font-family')?.addEventListener('change', e => {
-                GM_setValue(STORAGE.fontFamily, e.target.value);
+                saveState('fontFamily', e.target.value);
                 const isCustom = e.target.value === 'custom';
                 document.getElementById('cai-custom-font-group')?.classList.toggle('cai-hidden', !isCustom);
                 if (!isCustom) applyStyles();
             });
-            document.getElementById('cai-custom-font-url')?.addEventListener('input', e => GM_setValue(STORAGE.fontCustomUrl, e.target.value));
+            document.getElementById('cai-custom-font-url')?.addEventListener('input', e => saveState('fontCustomUrl', e.target.value));
             document.getElementById('cai-custom-font-url')?.addEventListener('change', () => applyStyles());
-            document.getElementById('cai-font-weight')?.addEventListener('change', e => { GM_setValue(STORAGE.fontWeight, e.target.value); applyStyles(); });
+            document.getElementById('cai-font-weight')?.addEventListener('change', e => { saveState('fontWeight', e.target.value); applyStyles(); });
 
             // Text color mode — show/hide global vs separate groups
             document.getElementById('cai-text-color-mode')?.addEventListener('change', e => {
-                GM_setValue(STORAGE.textColorMode, e.target.value);
+                saveState('textColorMode', e.target.value);
                 document.getElementById('cai-text-global-group')?.classList.toggle('cai-hidden', e.target.value !== 'global');
                 document.getElementById('cai-text-separate-group')?.classList.toggle('cai-hidden', e.target.value !== 'separate');
                 applyStyles();
@@ -1288,7 +1337,7 @@ ${MSG} .prose *,
 
             // Corner mode buttons
             document.getElementById('cai-corner-uniform')?.addEventListener('click', () => {
-                GM_setValue(STORAGE.cornerMode, 'uniform');
+                saveState('cornerMode', 'uniform');
                 document.getElementById('cai-corner-uniform')?.classList.add('active');
                 document.getElementById('cai-corner-custom')?.classList.remove('active');
                 document.getElementById('cai-uniform-group')?.classList.remove('cai-hidden');
@@ -1296,7 +1345,7 @@ ${MSG} .prose *,
                 updateCornerPreviews(); applyStyles();
             });
             document.getElementById('cai-corner-custom')?.addEventListener('click', () => {
-                GM_setValue(STORAGE.cornerMode, 'custom');
+                saveState('cornerMode', 'custom');
                 document.getElementById('cai-corner-custom')?.classList.add('active');
                 document.getElementById('cai-corner-uniform')?.classList.remove('active');
                 document.getElementById('cai-custom-group')?.classList.remove('cai-hidden');
@@ -1877,16 +1926,7 @@ body.light .bubble{
             }, 200);
         });
 
-        window.addEventListener('popstate', () => {
-            setTimeout(() => {
-                if (isInChat()) {
-                    enableScript();
-                } else {
-                    disableScript();
-                }
-            }, 200);
-        });
-
+        loadState();
         applyBackground();
         applyStyles();
         ensureBackgroundLayer();
